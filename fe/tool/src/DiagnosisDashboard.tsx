@@ -78,6 +78,7 @@ interface ToothDetail {
   treatment_method: string
   estimated_duration: string
   severity_percent: number
+  status: 'NEEDS_TREATMENT' | 'ALREADY_TREATED' | 'INFO'
 }
 
 interface FullReportResponse {
@@ -546,18 +547,46 @@ function LandmarkDot({ point, naturalW, naturalH }: {
   )
 }
 
+const TOOTH_CARD_THEME = {
+  NEEDS_TREATMENT: {
+    bg: 'bg-red-50', border: 'border-red-200',
+    iconBg: 'bg-red-100', iconColor: '#EF4444',
+    innerBorder: 'border-red-100', textColor: 'text-red-700',
+    barBg: 'bg-red-100', barGradient: 'linear-gradient(90deg, #F87171, #DC2626)',
+    barText: 'text-red-500', severityLabel: 'Mức độ nghiêm trọng',
+  },
+  ALREADY_TREATED: {
+    bg: 'bg-green-50', border: 'border-green-200',
+    iconBg: 'bg-green-100', iconColor: '#10B981',
+    innerBorder: 'border-green-100', textColor: 'text-green-700',
+    barBg: 'bg-green-100', barGradient: 'linear-gradient(90deg, #6EE7B7, #059669)',
+    barText: 'text-green-600', severityLabel: 'Mức độ can thiệp',
+  },
+  INFO: {
+    bg: 'bg-blue-50', border: 'border-blue-200',
+    iconBg: 'bg-blue-100', iconColor: '#3B82F6',
+    innerBorder: 'border-blue-100', textColor: 'text-blue-700',
+    barBg: 'bg-blue-100', barGradient: 'linear-gradient(90deg, #93C5FD, #2563EB)',
+    barText: 'text-blue-500', severityLabel: 'Mức liên quan',
+  },
+} as const
+
 function ToothCard({ tooth }: { tooth: ToothDetail }) {
+  const status = tooth.status ?? 'NEEDS_TREATMENT'
+  const theme = TOOTH_CARD_THEME[status] ?? TOOTH_CARD_THEME.NEEDS_TREATMENT
   const priority = severityToPriority(tooth.severity_percent)
   return (
-    <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex flex-col gap-3">
+    <div className={`${theme.bg} border ${theme.border} rounded-xl p-4 flex flex-col gap-3`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center shrink-0">
-            <ToothIcon size={17} color="#EF4444" />
+          <div className={`w-9 h-9 rounded-full ${theme.iconBg} flex items-center justify-center shrink-0`}>
+            <ToothIcon size={17} color={theme.iconColor} />
           </div>
           <div>
             <p className="text-[13.5px] font-bold text-gray-800">Răng {tooth.tooth_number}</p>
-            <p className="text-[11px] text-gray-500 italic">{tooth.latin_name}</p>
+            {tooth.latin_name && (
+              <p className="text-[11px] text-gray-500 italic">{tooth.latin_name}</p>
+            )}
           </div>
         </div>
         <span
@@ -568,23 +597,23 @@ function ToothCard({ tooth }: { tooth: ToothDetail }) {
         </span>
       </div>
       <p className="text-[12px] text-gray-700 font-medium leading-snug">{tooth.disease_name}</p>
-      <div className="bg-white border border-red-100 rounded-lg px-3 py-1.5">
-        <p className="text-[11.5px] font-semibold text-red-700">{tooth.treatment_method}</p>
+      <div className={`bg-white border ${theme.innerBorder} rounded-lg px-3 py-1.5`}>
+        <p className={`text-[11.5px] font-semibold ${theme.textColor}`}>{tooth.treatment_method}</p>
       </div>
       <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
         <ClockIcon />{tooth.estimated_duration}
       </div>
       <div>
         <div className="flex justify-between text-[10.5px] font-semibold mb-1">
-          <span className="text-gray-400">Mức độ nghiêm trọng</span>
-          <span className="text-red-500">{tooth.severity_percent}%</span>
+          <span className="text-gray-400">{theme.severityLabel}</span>
+          <span className={theme.barText}>{tooth.severity_percent}%</span>
         </div>
-        <div className="h-[6px] w-full rounded-full bg-red-100 overflow-hidden">
+        <div className={`h-[6px] w-full rounded-full ${theme.barBg} overflow-hidden`}>
           <div
             className="h-full rounded-full transition-all duration-700"
             style={{
               width: `${tooth.severity_percent}%`,
-              background: 'linear-gradient(90deg, #F87171, #DC2626)',
+              background: theme.barGradient,
             }}
           />
         </div>
@@ -815,7 +844,7 @@ export default function DiagnosisDashboard({ onBack, uploadedImages }: Diagnosis
       form.append('panoramic_file', panoramicFile)
       const cephFile = uploadedImages?.['lateral-skull']?.file
       if (cephFile) form.append('ceph_file', cephFile)
-      const res = await axios.post<FullReportResponse>(API_URL, form, {
+      const res = await axios.post<FullReportResponse>(`${API_URL}?fdi_conf=0.4&cv_conf=0.3`, form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       })
       setData(res.data)
@@ -981,7 +1010,7 @@ export default function DiagnosisDashboard({ onBack, uploadedImages }: Diagnosis
             valueColor="#F59E0B" bg="#FFFBEB" border="#FDE68A"
           />
           <SummaryCard
-            label="Cần điều trị"
+            label="Răng có vấn đề"
             value={summary?.needs_treatment ?? 0}
             sub="Ưu tiên cao"
             icon={<WarningIcon size={17} color="#EF4444" />}
@@ -1131,7 +1160,9 @@ export default function DiagnosisDashboard({ onBack, uploadedImages }: Diagnosis
             right={
               teethDetails.length > 0
                 ? <span className="text-[11px] font-bold bg-white/20 text-white px-3 py-0.5 rounded-full">
-                    {teethDetails.length} răng cần điều trị
+                    {teethDetails.filter(t => t.status === 'NEEDS_TREATMENT').length} cần điều trị
+                    {teethDetails.filter(t => t.status === 'ALREADY_TREATED').length > 0 &&
+                      ` · ${teethDetails.filter(t => t.status === 'ALREADY_TREATED').length} đã điều trị`}
                   </span>
                 : undefined
             }
@@ -1139,7 +1170,7 @@ export default function DiagnosisDashboard({ onBack, uploadedImages }: Diagnosis
           <div className="p-5">
             {teethDetails.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {teethDetails.map(tooth => <ToothCard key={tooth.tooth_number} tooth={tooth} />)}
+                {teethDetails.map((tooth, i) => <ToothCard key={`${tooth.tooth_number}-${i}`} tooth={tooth} />)}
               </div>
             ) : (
               <div className="flex flex-col items-center gap-3 py-10">
